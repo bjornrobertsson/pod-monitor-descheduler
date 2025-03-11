@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pod-monitor
+  namespace: coder
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-monitor-role
+  namespace: coder
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch", "delete"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list", "watch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pod-monitor-rolebinding
+  namespace: coder
+subjects:
+- kind: ServiceAccount
+  name: pod-monitor
+  namespace: coder
+roleRef:
+  kind: Role
+  name: pod-monitor-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pod-monitor
+  namespace: coder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pod-monitor
+  template:
+    metadata:
+      labels:
+        app: pod-monitor
+    spec:
+      serviceAccountName: pod-monitor
+      containers:
+      - name: pod-monitor
+        image: docker-direct.local/pod-monitor:latest
+        imagePullPolicy: Always
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        volumeMounts:
+        - name: token-volume
+          mountPath: /tmp/token.txt
+          subPath: token.txt
+      volumes:
+      - name: token-volume
+        secret:
+          secretName: coder-token
+          items:
+          - key: token
+            path: token.txt
+      imagePullSecrets:
+      - name: $REGISTRY_SECRET
